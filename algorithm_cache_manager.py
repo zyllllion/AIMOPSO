@@ -1,6 +1,6 @@
 """
-算法结果缓存管理器
-用于保存和加载算法运行结果，避免重复计算
+Algorithm result cache manager
+Saves and loads algorithm results to avoid redundant computation
 """
 
 import pickle
@@ -11,14 +11,14 @@ from pathlib import Path
 
 
 class AlgorithmCacheManager:
-    """算法结果缓存管理器"""
+    """Algorithm result cache manager"""
     
     def __init__(self, cache_dir="algorithm_cache"):
         """
-        初始化缓存管理器
+        Initialize cache manager
         
         Args:
-            cache_dir: 缓存目录路径
+            cache_dir: Cache directory path
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
@@ -26,40 +26,36 @@ class AlgorithmCacheManager:
         self.cache_index = self._load_cache_index()
     
     def _load_cache_index(self):
-        """加载缓存索引"""
+        """Load cache index"""
         if self.cache_index_file.exists():
             with open(self.cache_index_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return {}
     
     def _save_cache_index(self):
-        """保存缓存索引"""
+        """Save cache index"""
         with open(self.cache_index_file, 'w', encoding='utf-8') as f:
             json.dump(self.cache_index, f, indent=2, ensure_ascii=False)
     
     def _generate_cache_key(self, algorithm_name, scene_id, params, experiment_group=None):
         """
-        生成缓存键
+        Generate cache key
         
         Args:
-            algorithm_name: 算法名称
-            scene_id: 场景ID
-            params: 算法参数字典
-            experiment_group: 实验组编号 (1=PSO变体组, 2=经典算法组)
+            algorithm_name: Algorithm name
+            scene_id: Scene ID
+            params: Algorithm parameters dict
+            experiment_group: Experiment group number
         
         Returns:
-            缓存键字符串
+            Cache key string
         """
-        # 清理算法名称中的非法文件名字符（Windows: < > : " / \ | ? *）
         safe_algorithm_name = algorithm_name.replace('*', 'star').replace('/', '_').replace('\\', '_')
         safe_algorithm_name = safe_algorithm_name.replace(':', '_').replace('?', '_').replace('"', '_')
         safe_algorithm_name = safe_algorithm_name.replace('<', '_').replace('>', '_').replace('|', '_')
         
-        # 将参数转换为可哈希的字符串
         param_str = json.dumps(params, sort_keys=True)
         param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
-        
-        # 添加实验组标识
         if experiment_group is not None:
             group_suffix = f"_group{experiment_group}"
         else:
@@ -69,23 +65,20 @@ class AlgorithmCacheManager:
     
     def save_result(self, algorithm_name, scene_id, params, result_data, experiment_group=None):
         """
-        保存算法结果
+        Save algorithm result
         
         Args:
-            algorithm_name: 算法名称
-            scene_id: 场景ID
-            params: 算法参数字典 (如 {'pop_size': 100, 'n_gen': 500, 'seed': 1})
-            result_data: 结果数据字典 (如 {'path': ..., 'costs': ..., 'time': ...})
-            experiment_group: 实验组编号 (1=PSO变体组, 2=经典算法组)
+            algorithm_name: Algorithm name
+            scene_id: Scene ID
+            params: Algorithm parameters dict
+            result_data: Result data dict
+            experiment_group: Experiment group number
         """
         cache_key = self._generate_cache_key(algorithm_name, scene_id, params, experiment_group)
         cache_file = self.cache_dir / f"{cache_key}.pkl"
         
-        # 保存结果数据
         with open(cache_file, 'wb') as f:
             pickle.dump(result_data, f)
-        
-        # 更新索引
         self.cache_index[cache_key] = {
             'algorithm': algorithm_name,
             'scene_id': scene_id,
@@ -95,20 +88,20 @@ class AlgorithmCacheManager:
         }
         self._save_cache_index()
         
-        print(f"  ✅ 已缓存 {algorithm_name} 的结果: {cache_key}")
+        print(f"  ✅ Cached {algorithm_name} result: {cache_key}")
     
     def load_result(self, algorithm_name, scene_id, params, experiment_group=None):
         """
-        加载算法结果
+        Load algorithm result
         
         Args:
-            algorithm_name: 算法名称
-            scene_id: 场景ID
-            params: 算法参数字典
-            experiment_group: 实验组编号 (1=PSO变体组, 2=经典算法组)
+            algorithm_name: Algorithm name
+            scene_id: Scene ID
+            params: Algorithm parameters dict
+            experiment_group: Experiment group number
         
         Returns:
-            结果数据字典，如果不存在则返回None
+            Result data dict, or None if not found
         """
         cache_key = self._generate_cache_key(algorithm_name, scene_id, params, experiment_group)
         
@@ -118,41 +111,41 @@ class AlgorithmCacheManager:
         cache_file = Path(self.cache_index[cache_key]['file'])
         
         if not cache_file.exists():
-            print(f"  ⚠️  缓存文件不存在: {cache_file}")
+            print(f"  ⚠️  Cache file not found: {cache_file}")
             return None
         
         try:
             with open(cache_file, 'rb') as f:
                 result_data = pickle.load(f)
-            print(f"  ✅ 从缓存加载 {algorithm_name} 的结果")
+            print(f"  ✅ Loaded {algorithm_name} from cache")
             return result_data
         except Exception as e:
-            print(f"  ❌ 加载缓存失败: {e}")
+            print(f"  ❌ Failed to load cache: {e}")
             return None
     
     def has_cache(self, algorithm_name, scene_id, params, experiment_group=None):
         """
-        检查是否存在缓存
+        Check if cache exists
         
         Args:
-            algorithm_name: 算法名称
-            scene_id: 场景ID
-            params: 算法参数字典
-            experiment_group: 实验组编号 (1=PSO变体组, 2=经典算法组)
+            algorithm_name: Algorithm name
+            scene_id: Scene ID
+            params: Algorithm parameters dict
+            experiment_group: Experiment group number
         
         Returns:
-            True如果存在缓存，否则False
+            True if cache exists, False otherwise
         """
         cache_key = self._generate_cache_key(algorithm_name, scene_id, params, experiment_group)
         return cache_key in self.cache_index
     
     def clear_cache(self, algorithm_name=None, scene_id=None):
         """
-        清除缓存
+        Clear cache
         
         Args:
-            algorithm_name: 算法名称，如果为None则清除所有
-            scene_id: 场景ID，如果为None则清除所有场景
+            algorithm_name: Algorithm name, None to clear all
+            scene_id: Scene ID, None to clear all scenes
         """
         keys_to_remove = []
         
@@ -175,43 +168,34 @@ class AlgorithmCacheManager:
             del self.cache_index[key]
         
         self._save_cache_index()
-        print(f"  🗑️  已清除 {len(keys_to_remove)} 个缓存")
+        print(f"  🗑️  Cleared {len(keys_to_remove)} cache entries")
     
     def list_cache(self):
-        """列出所有缓存"""
+        """List all cache entries"""
         print("\n" + "="*80)
-        print(" 缓存列表")
+        print(" Cache List")
         print("="*80)
         
         if not self.cache_index:
-            print("  (空)")
+            print("  (empty)")
             return
         
         for cache_key, info in self.cache_index.items():
             print(f"\n📦 {cache_key}")
-            print(f"   算法: {info['algorithm']}")
-            print(f"   场景: Scene {info['scene_id']}")
-            print(f"   参数: {info['params']}")
-            print(f"   文件: {info['file']}")
+            print(f"   Algorithm: {info['algorithm']}")
+            print(f"   Scene: Scene {info['scene_id']}")
+            print(f"   Params: {info['params']}")
+            print(f"   File: {info['file']}")
 
 
-# 使用示例
 if __name__ == "__main__":
-    # 创建缓存管理器
     cache_mgr = AlgorithmCacheManager()
     
-    # 示例：保存结果
     params = {'pop_size': 100, 'n_gen': 500, 'seed': 1}
     result = {'path': [[1, 2, 3]], 'costs': [0.1, 0.2, 0.3, 0.4], 'time': 120.5}
     cache_mgr.save_result('PSO', 2, params, result)
     
-    # 示例：加载结果
     loaded = cache_mgr.load_result('PSO', 2, params)
-    print(f"加载的结果: {loaded}")
+    print(f"Loaded result: {loaded}")
     
-    # 示例：列出缓存
     cache_mgr.list_cache()
-    
-    # 示例：清除缓存
-    # cache_mgr.clear_cache('PSO')  # 清除PSO的所有缓存
-    # cache_mgr.clear_cache()  # 清除所有缓存
