@@ -1,8 +1,7 @@
 import numpy as np
+
 def dominates(cost1, cost2):
-    """
-    cost1 是否支配 cost2
-    """
+    """Check if cost1 dominates cost2"""
     if np.any(np.isinf(cost1)):
         return False
     if np.any(np.isinf(cost2)) and not np.any(np.isinf(cost1)):
@@ -10,15 +9,14 @@ def dominates(cost1, cost2):
     return np.all(cost1 <= cost2) and np.any(cost1 < cost2)
 def determine_domination(pop):
     """
-    MATLAB 样式双层支配判断（包含最后元素单独处理）
-    含 Inf 的个体初步标记为支配；后续若全部 Inf 会用 fallback 重新挑选一个。
+    MATLAB-style dual-layer domination determination
+    Individuals with Inf are initially marked as dominated
     """
     n = len(pop)
     for p in pop:
         p['IsDominated'] = False
         if np.any(np.isinf(p['Cost'])):
             p['IsDominated'] = True
-    # 前 n-1
     for i in range(n - 1):
         if pop[i]['IsDominated']:
             continue
@@ -27,7 +25,6 @@ def determine_domination(pop):
                 pop[j]['IsDominated'] = True
             if dominates(pop[j]['Cost'], pop[i]['Cost']):
                 pop[i]['IsDominated'] = True
-    # 最后一个
     if n > 0:
         if np.any(np.isinf(pop[-1]['Cost'])):
             pop[-1]['IsDominated'] = True
@@ -41,15 +38,12 @@ def determine_domination(pop):
     return pop
 def ensure_non_empty_rep(all_solutions):
     """
-    如果所有解都被标记为支配导致 rep 为空，挑一个"最不坏"解：
-      1. 按 Inf 个数升序
-      2. 再按 替换 Inf->1e9 后的总和 升序
-    返回新的 rep 列表（保证至少一个）
+    If all solutions are marked as dominated resulting in empty rep, pick the "least bad" solution
+    Returns new rep list (guaranteed at least one)
     """
     rep = [p for p in all_solutions if not p['IsDominated']]
     if rep:
         return rep
-    # 计算排序键
     def key_fn(p):
         cost = p['Cost']
         inf_mask = np.isinf(cost)
@@ -57,7 +51,7 @@ def ensure_non_empty_rep(all_solutions):
         surrogate_sum = np.sum(np.where(inf_mask, 1e9, cost))
         return (inf_count, surrogate_sum)
     best = min(all_solutions, key=key_fn)
-    best['IsDominated'] = False  # 解除 dominated 标记
+    best['IsDominated'] = False
     return [best]
 def create_grid(rep, n_grid, alpha):
     if not rep:
@@ -95,14 +89,11 @@ def find_grid_index(p, grid):
     return p
 def roulette_wheel_selection(P):
     """
-    稳健轮盘赌：
-      - 若 P 为空 -> raise
-      - 若 sum(P)==0 -> 均匀分布
-      - 若浮点误差使 r > C[-1] -> 返回最后一个
+    Robust roulette wheel selection
     """
     P = np.asarray(P, dtype=float)
     if P.size == 0:
-        raise ValueError("roulette_wheel_selection 收到空概率向量。")
+        raise ValueError("roulette_wheel_selection received empty probability vector.")
     s = np.sum(P)
     if not np.isfinite(s) or s <= 0:
         P = np.full_like(P, 1.0 / P.size)
@@ -116,17 +107,14 @@ def roulette_wheel_selection(P):
     return idxs[0]
 def select_leader(rep, beta):
     """
-    选择仓库中的领导者（多样性）。
-    加稳健防护：若 rep 空 -> raise。
-    概率用稳定指数防止下溢。
+    Select leader from repository (diversity)
     """
     if not rep:
-        raise ValueError("select_leader: rep 为空，无法选择领导者。")
+        raise ValueError("select_leader: rep is empty, cannot select leader.")
     grid_indices = [p['GridIndex'] for p in rep]
     unique_indices, counts = np.unique(grid_indices, return_counts=True)
-    # 稳定指数
     raw = -beta * counts.astype(float)
-    raw -= np.max(raw)  # 防下溢
+    raw -= np.max(raw)
     weights = np.exp(raw)
     if np.all(weights == 0):
         weights = np.ones_like(weights)
@@ -151,9 +139,7 @@ def delete_one_rep_member(rep, gamma):
     rep.pop(idx_to_delete)
     return rep
 def mutate(particle, delta, var_max, var_min):
-    """
-    合理化变异
-    """
+    """Mutation operator"""
     pos = particle['Position']
     pbest_pos = particle['Best']['Position']
     n_var = len(pos['r'][0])
@@ -168,7 +154,7 @@ def mutate(particle, delta, var_max, var_min):
 
 def choose_deterministic_rep(rep):
     """
-    字典序挑选确定代表（如果 rep 空返回 None）
+    Choose deterministic representative by lexicographic order
     """
     if not rep:
         return None
