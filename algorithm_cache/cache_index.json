@@ -1,0 +1,13 @@
+{
+  "AstarIMOPSO_scene1_6e801bae": {
+    "algorithm": "A*IMOPSO",
+    "scene_id": 1,
+    "params": {
+      "pop_size": 100,
+      "n_gen": 500,
+      "seed": 42
+    },
+    "file": "algorithm_cache\\AstarIMOPSO_scene1_6e801bae.pkl",
+    "timestamp": "1767171644.2782345"
+  }
+}
