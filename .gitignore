@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Experimental Results
+*.pkl
+*.npy
+algorithm_cache/
+run_results*/
+figures/
+*.png
+*.eps
+*.pdf
+
+# Data
+*.csv
+*.mat
