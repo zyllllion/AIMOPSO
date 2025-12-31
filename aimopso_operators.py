@@ -1,12 +1,8 @@
- 
-
-# he_nmopso_operators.py
+# aimopso_operators.py
 import numpy as np
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
-# --------------------------------------------------
-# 拥挤度距离计算
-# --------------------------------------------------
+
 def calculate_crowding_distance(F):
     n_points, n_obj = F.shape
     if n_points <= 2:
@@ -18,13 +14,12 @@ def calculate_crowding_distance(F):
         sorted_indices = np.argsort(F[:, j])
         sorted_F = F[sorted_indices, j]
 
-        # 边界点 = 无穷大
         crowding[sorted_indices[0]] = np.inf
         crowding[sorted_indices[-1]] = np.inf
 
         f_min, f_max = sorted_F[0], sorted_F[-1]
         norm = f_max - f_min
-        if norm < 1e-12:  # 避免除以零
+        if norm < 1e-12:
             continue
 
         for i in range(1, n_points - 1):
@@ -33,13 +28,12 @@ def calculate_crowding_distance(F):
     return np.nan_to_num(crowding, nan=0.0, posinf=np.inf)
 
 
-# --------------------------------------------------
-# 精英保留：更新外部存档
-# --------------------------------------------------
 def get_new_repository(combined_pop, rep_size):
     """
-    输入：combined_pop (list of particles, 每个 particle 至少有 'Cost')
-    输出：截断后的新存档 (list)
+    Update external archive with elitism
+    
+    Input: combined_pop (list of particles, each has 'Cost')
+    Output: truncated new archive (list)
     """
     if not combined_pop:
         return []
@@ -72,11 +66,8 @@ def get_new_repository(combined_pop, rep_size):
     return new_rep
 
 
-# --------------------------------------------------
-# 锦标赛选择领导者
-# --------------------------------------------------
 def dominates(cost1, cost2):
-    """判断 cost1 是否支配 cost2"""
+    """Check if cost1 dominates cost2"""
     return np.all(cost1 <= cost2) and np.any(cost1 < cost2)
 
 
@@ -101,9 +92,6 @@ def select_leader_by_tournament(rep):
         return p1 if np.random.rand() < 0.5 else p2
 
 
-# --------------------------------------------------
-# 多项式变异
-# --------------------------------------------------
 def polynomial_mutation(particle, var_max, var_min, eta=20, prob_mut=0.2):
     new_pos = {k: v.copy() for k, v in particle['Position'].items()}
 
