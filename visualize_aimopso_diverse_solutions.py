@@ -1,6 +1,250 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+A*IMOPSO diverse solution set visualization script
+- Visualizes diverse solution sets from A*IMOPSO algorithm
+- Generates high-quality 3D and top views for paper
+- Saves in same format as comparison visualization script
+"""
+
+import numpy as np
+import time
+import sys
+from scipy.interpolate import RegularGridInterpolator
+
+try:
+    from aimopso_runner import run_aimopso
+    from plotting_matlab_exact_final2 import plot_and_save_paper_figures
+    from environments import create_scene1_model, create_scene2_model, create_scene3_model,create_scene4_model
+    from cost_function import calculate_cost
+    from algorithm_cache_manager import AlgorithmCacheManager
+except ImportError as e:
+    print(f"Error: Failed to import custom modules - {e}")
+    sys.exit(1)
+
+def get_unified_absolute_path(waypoints_middle_only, model):
+    """
+    Unified encoding strategy - path conversion function consistent with comparison script
+    
+    Input: waypoints_middle_only - middle waypoints only (no start/end, ordered)
+    Output: complete absolute path with start/end (for plotting)
+    """
+    start_pos, end_pos = model['start'], model['end']
+    n_wp = waypoints_middle_only.shape[0]
+
+    sorted_waypoints_relative = waypoints_middle_only
+
+    path_nodes_relative = np.vstack([start_pos, sorted_waypoints_relative, end_pos])
+
+    ground_z = np.zeros(len(path_nodes_relative))
+    for i in range(len(path_nodes_relative)):
+        y_idx = int(np.round(path_nodes_relative[i, 1]))
+        x_idx = int(np.round(path_nodes_relative[i, 0]))
+        y_idx = np.clip(y_idx, 0, model['map_range'][1] - 1)
+        x_idx = np.clip(x_idx, 0, model['map_range'][0] - 1)
+        ground_z[i] = model['H'][y_idx, x_idx]
+
+    path_nodes_absolute = path_nodes_relative.copy()
+    path_nodes_absolute[:, 2] += ground_z
+
+    return path_nodes_absolute
+
+
+def plot_aimopso_with_custom_color(paths_absolute, path_labels, model, save_dir, scene_name, dpi=300):
+    """
+    Plot using same A*IMOPSO color as comparison script
+    """
+    path_labels = ["A*IMOPSO"]
+    
+    plot_and_save_paper_figures(
+        paths_absolute=paths_absolute,
+        path_labels=path_labels,
+        model=model,
+        save_dir=save_dir,
+        scene_name=scene_name,
+        dpi=dpi
+    )
+
+
+
+
+if __name__ == '__main__':
+    SCENE_TO_RUN = 1
+    SEED = 42
+    
+    USE_CACHE = False
+    CLEAR_CACHE = False
+    EXPERIMENT_GROUP = None
+    
+    SAVE_DIR = "aimopso_diverse_solutions"
+    DPI = 300
+    
+    print("=" * 80);
+    print(" A*IMOPSO Diverse Solution Set Visualization");
+    print("="* 80)
+    print(f"Scene: {SCENE_TO_RUN}, Seed: {SEED}, Save dir: {SAVE_DIR}")
+    print(f"Cache: {'Enabled' if USE_CACHE else 'Disabled'}")
+
+    FEASIBILITY_THRESHOLD = 900000
+    
+    cache_mgr = AlgorithmCacheManager()
+    
+    if CLEAR_CACHE:
+        print("\n🗑️  Clearing A*IMOPSO cache...")
+        cache_mgr.clear_cache(algorithm_name='A*IMOPSO')
+        print("✅ Cache cleared, exiting.")
+        sys.exit(0)
+    
+    common_params = {
+        'pop_size': 100,
+        'n_gen': 500,
+        'seed': SEED
+    }
+
+    print("\n[1/4] Creating problem environment...")
+    if SCENE_TO_RUN == 1:
+        model = create_scene1_model()
+    elif SCENE_TO_RUN == 2:
+        model = create_scene2_model()
+    elif SCENE_TO_RUN == 3:
+        model = create_scene3_model()
+    elif SCENE_TO_RUN == 4:
+        model = create_scene4_model()
+    else:
+        raise ValueError(f"Unknown scene: {SCENE_TO_RUN}. Set SCENE_TO_RUN to 1, 2, 3, or 4.")
+
+    print(f"--- Loaded scene: {model.get('name', 'Unknown')} ---")
+    model['terrain_interpolator'] = RegularGridInterpolator(
+        (np.arange(model['map_range'][1]), np.arange(model['map_range'][0])), model['H'], bounds_error=False,
+        fill_value=0)
+    var_min_for_cost = {'r': 3 * np.linalg.norm(model['start'] - model['end']) / model['n'] / 9}
+    
+    print("\n[2/4] Running A*IMOPSO algorithm...")
+    
+    algorithm_name = 'A*IMOPSO'
+    scene_id = SCENE_TO_RUN
+    paths_aimopso, rep_feasible = None, None
+    
+    if USE_CACHE:
+        cached_result = cache_mgr.load_result(algorithm_name, scene_id, common_params, EXPERIMENT_GROUP)
+        if cached_result:
+            print("  ✅ Loaded A*IMOPSO result from cache")
+            paths_aimopso = cached_result['pareto_paths']
+            pareto_costs = cached_result['pareto_costs']
+            rep_feasible = [{'Cost': cost} for cost in pareto_costs]
+            execution_time = cached_result['time']
+            print(f"     Done, time: {execution_time:.2f} sec (cached)")
+        else:
+            print("  -> Result not found in cache, running algorithm...")
+    
+    if paths_aimopso is None or rep_feasible is None:
+        start_time = time.time()
+        paths_aimopso, rep_feasible, _ = run_aimopso(model, seed=SEED, mode='full')
+        execution_time = time.time() - start_time
+        print(f"     Done, time: {execution_time:.2f} sec")
+        
+        if USE_CACHE and rep_feasible:
+            all_costs = [p['Cost'] for p in rep_feasible]
+            cache_data = {
+                'pareto_paths': paths_aimopso,
+                'pareto_costs': all_costs,
+                'time': execution_time
+            }
+            cache_mgr.save_result(algorithm_name, scene_id, common_params, cache_data, EXPERIMENT_GROUP)
+            print(f"  ✅ Cached {algorithm_name} result")
+
+    all_paths_for_plot, all_labels_for_plot, final_results = [], [], {}
+
+    if rep_feasible:
+        print("\n[3/4] Processing Pareto optimal solution set...")
+        
+        all_costs = [p['Cost'] for p in rep_feasible]
+        
+        feasible_costs = []
+        feasible_indices = []
+        
+        for i, cost in enumerate(all_costs):
+            if (cost is not None and 
+                np.all(np.isfinite(cost)) and 
+                np.all(np.array(cost) < FEASIBILITY_THRESHOLD)):
+                feasible_costs.append(cost)
+                feasible_indices.append(i)
+        
+        if feasible_costs:
+            from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+            feasible_costs_array = np.array(feasible_costs)
+            nd_indices = NonDominatedSorting().do(feasible_costs_array, only_non_dominated_front=True)
+            
+            pareto_costs = [feasible_costs[i] for i in nd_indices]
+            if paths_aimopso and len(paths_aimopso) == len(all_costs):
+                feasible_paths = [paths_aimopso[feasible_indices[i]] for i in range(len(feasible_costs))]
+                pareto_raw_paths = [feasible_paths[i] for i in nd_indices]
+            else:
+                print(f"     Warning: Path count ({len(paths_aimopso) if paths_aimopso else 0}) != solution count ({len(all_costs)})!")
+                pareto_raw_paths = [paths_aimopso[0]] * len(pareto_costs) if paths_aimopso else []
+            
+            print(f"     rep_feasible count: {len(all_costs)}, valid count: {len(feasible_costs)}, Pareto front count: {len(pareto_costs)}, Pareto ratio: {len(pareto_costs)/len(feasible_costs):.3f}")
+            
+            pareto_costs_array = np.array(pareto_costs)
+            total_costs = np.sum(pareto_costs_array, axis=1)
+
+            excellent_indices = {
+                "A*IMOPSO (Best Total)": np.argmin(total_costs),
+                "A*IMOPSO (Shortest)": np.argmin(pareto_costs_array[:, 0]),
+                "A*IMOPSO (Safest)": np.argmin(pareto_costs_array[:, 1]),
+                "A*IMOPSO (Lowest)": np.argmin(pareto_costs_array[:, 2]),
+                "A*IMOPSO (Smoothest)": np.argmin(pareto_costs_array[:, 3]),
+            }
+            for name, idx in excellent_indices.items():
+                final_results[name] = pareto_costs[idx]
+
+            best_total_idx = np.argmin(total_costs)
+            best_raw_path = pareto_raw_paths[best_total_idx]
+            path_to_plot = get_unified_absolute_path(best_raw_path[1:-1], model)
+            all_paths_for_plot.append(path_to_plot)
+            all_labels_for_plot.append("A*IMOPSO")
+
+            print("     Done. Selected excellent representative solutions:")
+            print("-" * 80)
+            print(f"{'Solution Type':<28} | {'J1 (Length)':<12} | {'J2 (Threat)':<12} | {'J3 (Height)':<12} | {'J4 (Smooth)':<12}")
+            print("-" * 80)
+            for name, costs in sorted(final_results.items()):
+                print(f"{name:<28} | {costs[0]:<12.4f} | {costs[1]:<12.4f} | {costs[2]:<12.4f} | {costs[3]:<12.4f}")
+            print("-" * 80)
+
+        else:
+            print("     Warning: No valid feasible solutions found!")
+    else:
+        print("     Warning: A*IMOPSO did not return rep_feasible.")
+
+    print("\n[4/4] Generating high-quality paper figures...")
+    if all_paths_for_plot:
+        scene_name = f"scene_{SCENE_TO_RUN}"
+        
+        plot_aimopso_with_custom_color(
+            paths_absolute=all_paths_for_plot,
+            path_labels=all_labels_for_plot, 
+            model=model,
+            save_dir=SAVE_DIR,
+            scene_name=scene_name,
+            dpi=DPI
+        )
+        print("     Plotting done!")
+        print(f"\n✅ Images saved to: {SAVE_DIR}/")
+        print(f"   - {scene_name}_3d_view.png (3D view)")
+        print(f"   - {scene_name}_top_view.png (Top view)")
+        print(f"   - {scene_name}_combined.png (PNG combined)")
+        print(f"   - {scene_name}_combined.eps (EPS combined) ⭐")
+    else:
+        print("     Warning: No feasible paths found for plotting.")
+
+    print("\n💾 Cache statistics:")
+    cache_mgr.list_cache()
+    
+    print("\nExecution complete.")
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 A*IMOPSO 多样化解集可视化脚本
 - 专门用于可视化A*IMOPSO算法的多样化解集
 - 生成高质量的3D和俯视图，用于论文展示
