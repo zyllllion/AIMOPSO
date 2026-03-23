@@ -25,7 +25,7 @@ def _calculate_multi_objective_cost(current, neighbor, came_from, grid, threats_
     # J3: 地形高度代价（归一化后的地形高度）
     terrain_cost = grid[neighbor[0], neighbor[1]]
     if terrain_cost == np.inf:
-        return np.inf  # 障碍物
+        return np.inf  # Obstacle cell sentinel for raw A* search.
     
     # J4: 平滑度代价（转弯角度惩罚）
     smoothness_cost = 0

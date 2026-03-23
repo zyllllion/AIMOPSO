@@ -46,7 +46,7 @@ def calculate_cost(sol_cartesian, model, terrain_interpolator, var_min):
     """
     成本函数 - 严格对齐 MATLAB MyCost.m 的归一化逻辑
     """
-    FINITE_PENALTY = np.inf  # 对应MATLAB的J_inf = inf
+    FINITE_PENALTY = np.inf  # Raw infeasible sentinel used before shared filtering.
 
     # 获取笛卡尔坐标（注意：z是相对高度，符合MATLAB设计）
     x, y, z_rel = sol_cartesian['x'], sol_cartesian['y'], sol_cartesian['z']

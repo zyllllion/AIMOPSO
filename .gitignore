@@ -1,20 +1,20 @@
 __pycache__/
 *.pyc
 .idea/
+
+# caches and generated outputs
 algorithm_cache/
 run_results_*/
 analysis_*/
+aimopso_diverse_solutions_*/
 
-# large experiment / analysis artifacts
+# binary/model/intermediate artifacts
 *.npz
 *.npy
 *.pkl
 *.log
 
-# keep reviewer-facing lightweight artifacts only
+# keep lightweight reviewer artifacts only
 !assets/
 !assets/reviewer/
 !assets/reviewer/*
-!results/
-!results/demo/
-!results/demo/*
