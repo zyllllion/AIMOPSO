@@ -3,4 +3,18 @@ __pycache__/
 .idea/
 algorithm_cache/
 run_results_*/
-analysis_mo_functions_*/
+analysis_*/
+
+# large experiment / analysis artifacts
+*.npz
+*.npy
+*.pkl
+*.log
+
+# keep reviewer-facing lightweight artifacts only
+!assets/
+!assets/reviewer/
+!assets/reviewer/*
+!results/
+!results/demo/
+!results/demo/*
