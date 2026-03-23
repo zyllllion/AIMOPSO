@@ -12,6 +12,9 @@ import time
 import sys
 from scipy.interpolate import RegularGridInterpolator
 
+from pymoo.config import Config
+Config.warnings['not_compiled'] = False
+
 try:
     from aimopso_runner import run_aimopso
     from plotting_matlab_exact_final2 import plot_and_save_paper_figures
@@ -82,7 +85,7 @@ def plot_aimopso_with_custom_color(paths_absolute, path_labels, model, save_dir,
 
 if __name__ == '__main__':
     # ==================== 【配置区域】 ====================
-    SCENE_TO_RUN = 1  # 🔧 修改场景：1, 2, 3, 4
+    SCENE_TO_RUN = 4  # 🔧 修改场景：1, 2, 3, 4
     SEED = 42          # 随机种子
     
     # 缓存设置

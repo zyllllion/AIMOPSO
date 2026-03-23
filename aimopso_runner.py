@@ -76,7 +76,17 @@ def _filter_feasible(pop):
 
 
 # ======================= 核心修复: 修改函数签名，接收 model 参数 =======================
-def run_aimopso(model, seed=None, mode='stats', a_star_weight=None, use_a_star_init=True, use_dual_leader=True):
+def run_aimopso(
+    model,
+    seed=None,
+    mode='stats',
+    a_star_weight=None,
+    use_a_star_init=True,
+    use_dual_leader=True,
+    max_it_override=None,
+    n_pop_override=None,
+    n_rep_override=None,
+):
     """
     A*IMOPSO 算法。
     
@@ -88,6 +98,8 @@ def run_aimopso(model, seed=None, mode='stats', a_star_weight=None, use_a_star_i
             - None: 自动根据场景复杂度调整
             - 0.0: 完全随机初始化
             - 1.0: 完全使用A*路径初始化
+        max_it_override / n_pop_override / n_rep_override:
+            仅用于实验协议控制，默认 None 时保持算法原始配置不变。
     """
     if seed is not None:
         np.random.seed(seed)
@@ -128,6 +140,12 @@ def run_aimopso(model, seed=None, mode='stats', a_star_weight=None, use_a_star_i
     terrain_interpolator = model['terrain_interpolator']
 
     max_it, n_pop, n_rep = 500, 100, 50
+    if max_it_override is not None:
+        max_it = int(max_it_override)
+    if n_pop_override is not None:
+        n_pop = int(n_pop_override)
+    if n_rep_override is not None:
+        n_rep = int(n_rep_override)
     # ⚠️ PSO参数设置（与标准PSO保持一致以确保公平对比）
     w, wdamp, c1, c2 = 1.0, 0.98, 1.5, 1.5
     # ✅ 最优prob_attack_force（经实验验证）

@@ -30,19 +30,23 @@ def _draw_cylinder(xc, yc, z_base, radius, height, color=(1, 0, 0), opacity=0.30
     return surf
 
 
-def _plot_path_line_and_midpoints(path, color_line=(0, 0, 0), tube_radius=2.0, 
-                                   show_control_points=True, z_offset=None):
-    """绘制路径线和控制点"""
+def _plot_path_line_and_midpoints(path, color_line=(0, 0, 0), tube_radius=2.5,
+                                   show_control_points=True, z_offset=None,
+                                   point_scale=12, color_point=None):
+    """绘制路径线和控制点（线/点可分色）"""
     z = path[:, 2] + (z_offset if z_offset is not None else 0)
     mlab.plot3d(path[:, 0], path[:, 1], z, color=color_line, tube_radius=tube_radius)
+
+    if color_point is None:
+        color_point = color_line
 
     if show_control_points and path.shape[0] > 2:
         num_original_points = 12
         indices = np.linspace(0, len(path) - 1, num_original_points, dtype=int)
         mid = path[indices[1:-1]]
         z_mid = mid[:, 2] + (z_offset if z_offset is not None else 0)
-        mlab.points3d(mid[:, 0], mid[:, 1], z_mid, color=color_line, 
-                     scale_factor=8, mode='sphere')
+        mlab.points3d(mid[:, 0], mid[:, 1], z_mid, color=color_point, 
+                     scale_factor=point_scale, mode='sphere')
 
 
 def _plot_terrain(H, map_size_x, map_size_y, colormap='summer', opacity=1.0):
@@ -61,20 +65,20 @@ def _create_matplotlib_legend(labels, colors, save_path='legend_temp.png', ncol=
         save_path: 图例保存路径
         ncol: 图例列数
     """
-    # 创建图例 figure（调整为竖向尺寸）
-    fig = plt.figure(figsize=(3, 4), dpi=150)  # 竖向布局
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman"],
+    })
+    fig = plt.figure(figsize=(3.5, 4.5), dpi=200)
     ax = fig.add_subplot(111)
     ax.axis('off')
     
-    # 创建图例 patches
     patches = []
     for label, color in zip(labels, colors):
-        # 确保颜色格式正确（matplotlib 需要 RGB tuple）
         patch = mpatches.Patch(facecolor=color, edgecolor='black', 
                                linewidth=0.8, label=label)
         patches.append(patch)
     
-    # 创建图例（放大字体和间距）
     legend = ax.legend(handles=patches,
                       loc='center',
                       ncol=ncol,
@@ -82,20 +86,65 @@ def _create_matplotlib_legend(labels, colors, save_path='legend_temp.png', ncol=
                       fancybox=False,
                       edgecolor='black',
                       framealpha=1.0,
-                      fontsize=12,  # 放大字体
-                      handlelength=2.0,  # 放大颜色块
-                      handleheight=1.2,
+                      fontsize=14,
+                      handlelength=2.5,
+                      handleheight=1.4,
                       columnspacing=1.5)
     
-    # 设置图例背景为白色
     legend.get_frame().set_facecolor('white')
-    legend.get_frame().set_linewidth(1.0)
+    legend.get_frame().set_linewidth(1.2)
     
-    # 保存图例（透明背景）
-    plt.savefig(save_path, bbox_inches='tight', dpi=150, 
+    plt.savefig(save_path, bbox_inches='tight', dpi=200, 
                 transparent=True, pad_inches=0.1)
     plt.close(fig)
     
+    return save_path
+
+
+def _create_right_panel(labels, label_colors, terrain_min, terrain_max, 
+                        colormap_name='summer', panel_height=None, save_path='right_panel.png'):
+    """
+    创建右侧面板：上方是算法图例，下方是地形 colorbar
+    返回保存路径
+    """
+    import matplotlib.cm as cm
+    import matplotlib.colors as mcolors
+    
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman"],
+    })
+    
+    fig, (ax_legend, ax_cb) = plt.subplots(2, 1, figsize=(0.5, 5.8),
+                                            gridspec_kw={'height_ratios': [1.2, 5]})
+    
+    # 上半部分：算法图例
+    ax_legend.axis('off')
+    patches = []
+    for label, color in zip(labels, label_colors):
+        patch = mpatches.Patch(facecolor=color, edgecolor='black', 
+                               linewidth=0.8, label=label)
+        patches.append(patch)
+    legend = ax_legend.legend(handles=patches, loc='center', frameon=True,
+                              fancybox=False, edgecolor='black', framealpha=1.0,
+                              fontsize=13, handlelength=2.2, handleheight=1.2)
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_linewidth(1.0)
+    
+    # 下半部分：地形 colorbar
+    cmap = cm.get_cmap(colormap_name)
+    norm = mcolors.Normalize(vmin=terrain_min, vmax=terrain_max)
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cb = fig.colorbar(sm, cax=ax_cb, orientation='vertical')
+    tick_step = 50
+    ticks = np.arange(terrain_min, terrain_max + 1, tick_step)
+    cb.set_ticks(ticks)
+    cb.ax.tick_params(labelsize=18)
+    
+    fig.subplots_adjust(hspace=0.2)
+    plt.savefig(save_path, bbox_inches='tight', dpi=200, transparent=False, pad_inches=0.02)
+    plt.close(fig)
     return save_path
 
 
@@ -144,31 +193,26 @@ def _overlay_legend_on_image(base_image_path, legend_path, output_path,
     return output_path
 
 
-def _crop_white_borders(image_path, output_path=None, border_threshold=250):
+def _crop_white_borders(image_path, output_path=None, border_threshold=250, padding=5):
     """
-    裁剪图片周围的白色边框
-    参数:
-        image_path: 输入图片路径
-        output_path: 输出图片路径（如果为None，则覆盖原图）
-        border_threshold: 白色阈值（0-255，接近255的像素被视为白色）
+    裁剪图片周围的白色边框，保留 padding 像素安全边距
     """
     from PIL import ImageChops
     
     img = Image.open(image_path).convert('RGB')
     
-    # 创建白色背景
     bg = Image.new('RGB', img.size, (255, 255, 255))
-    
-    # 计算差异
     diff = ImageChops.difference(img, bg)
-    
-    # 转换为灰度并获取边界框
     diff = diff.convert('L')
     bbox = diff.getbbox()
     
     if bbox:
-        # 裁剪图片
-        img_cropped = img.crop(bbox)
+        x0, y0, x1, y1 = bbox
+        x0 = max(0, x0 - padding)
+        y0 = max(0, y0 - padding)
+        x1 = min(img.width, x1 + padding)
+        y1 = min(img.height, y1 + padding)
+        img_cropped = img.crop((x0, y0, x1, y1))
         
         # 保存
         if output_path is None:
@@ -181,7 +225,7 @@ def _crop_white_borders(image_path, output_path=None, border_threshold=250):
         return image_path
 
 
-def _combine_images_horizontal(left_image_path, right_image_path, output_path, gap=20):
+def _combine_images_horizontal(left_image_path, right_image_path, output_path, gap=20, valign='center'):
     """
     将两张图片左右拼接成一张图片
     参数:
@@ -189,33 +233,33 @@ def _combine_images_horizontal(left_image_path, right_image_path, output_path, g
         right_image_path: 右侧图片路径
         output_path: 输出图片路径
         gap: 两张图片之间的间隙（像素）
+        valign: 垂直对齐方式 ('center', 'top', 'bottom')
     
     支持的输出格式：
         - .png: 使用 PIL 保存（高质量）
         - .eps: 使用 matplotlib 保存（矢量格式）
     """
-    # 打开图片
     img_left = Image.open(left_image_path).convert('RGB')
     img_right = Image.open(right_image_path).convert('RGB')
     
-    # 获取图片尺寸
     left_w, left_h = img_left.size
     right_w, right_h = img_right.size
     
-    # 计算拼接后的图片尺寸（高度取最大值）
     total_width = left_w + gap + right_w
     total_height = max(left_h, right_h)
     
-    # 创建新图片（白色背景）
     combined_img = Image.new('RGB', (total_width, total_height), (255, 255, 255))
     
-    # 粘贴左侧图片（垂直居中）
-    left_y = (total_height - left_h) // 2
-    combined_img.paste(img_left, (0, left_y))
+    def _calc_y(img_h):
+        if valign == 'top':
+            return 0
+        elif valign == 'bottom':
+            return total_height - img_h
+        else:
+            return (total_height - img_h) // 2
     
-    # 粘贴右侧图片（垂直居中）
-    right_y = (total_height - right_h) // 2
-    combined_img.paste(img_right, (left_w + gap, right_y))
+    combined_img.paste(img_left, (0, _calc_y(left_h)))
+    combined_img.paste(img_right, (left_w + gap, _calc_y(right_h)))
     
     # 根据输出格式选择保存方法
     output_ext = os.path.splitext(output_path)[1].lower()
@@ -238,13 +282,16 @@ def _combine_images_horizontal(left_image_path, right_image_path, output_path, g
 
 def _draw_custom_axes_and_grid(map_size_x, map_size_y, scene_z_max,
                                draw_x=True, draw_y=True, draw_z=True,
-                               yz_grid_at_far_side=False):
+                               yz_grid_at_far_side=False,
+                               tick_scale_override=None, label_scale_override=None):
     """绘制自定义坐标轴和网格"""
     grid_color = (0.7, 0.7, 0.7)
     axis_color = (0, 0, 0)
     label_color = (0, 0, 0)
-    tick_length = 20
+    tick_length = 30
     tick_interval = 200
+    tick_font_scale = tick_scale_override if tick_scale_override else 26
+    label_font_scale = label_scale_override if label_scale_override else 30
 
     # XY 平面网格
     if draw_x and draw_y:
@@ -277,38 +324,38 @@ def _draw_custom_axes_and_grid(map_size_x, map_size_y, scene_z_max,
     # X 轴
     if draw_x:
         mlab.plot3d([0, map_size_x], [0, 0], [0, 0], color=axis_color, tube_radius=1.5)
-        mlab.text3d(map_size_x / 2, -tick_length * 4, 0, 'x [m]', 
-                   scale=15, color=label_color)
+        mlab.text3d(map_size_x / 2, -tick_length * 5, 0, 'x [m]', 
+                   scale=label_font_scale, color=label_color)
         for x in np.arange(0, map_size_x + 1, tick_interval):
             mlab.plot3d([x, x], [0, -tick_length], [0, 0], 
                        color=axis_color, tube_radius=1)
-            mlab.text3d(x, -tick_length * 2.5, 0, str(x), 
-                       scale=12, color=label_color)
+            mlab.text3d(x, -tick_length * 3, 0, str(x), 
+                       scale=tick_font_scale, color=label_color)
     
     # Y 轴
     if draw_y:
         mlab.plot3d([0, 0], [0, map_size_y], [0, 0], color=axis_color, tube_radius=1.5)
-        mlab.text3d(-tick_length * 7, map_size_y / 2, 0, 'y [m]', 
-                   scale=15, color=label_color)
+        mlab.text3d(-tick_length * 8, map_size_y / 2, 0, 'y [m]', 
+                   scale=label_font_scale, color=label_color)
         for y in np.arange(0, map_size_y + 1, tick_interval):
             mlab.plot3d([-tick_length, 0], [y, y], [0, 0], 
                        color=axis_color, tube_radius=1)
-            mlab.text3d(-tick_length * 3.5, y, 0, str(y), 
-                       scale=12, color=label_color)
+            mlab.text3d(-tick_length * 4, y, 0, str(y), 
+                       scale=tick_font_scale, color=label_color)
     
     # Z 轴
     if draw_z:
         z_axis_x_pos = map_size_x if yz_grid_at_far_side else 0
         mlab.plot3d([z_axis_x_pos, z_axis_x_pos], [0, 0], [0, scene_z_max], 
                    color=axis_color, tube_radius=1.5)
-        mlab.text3d(z_axis_x_pos, -tick_length * 7, scene_z_max / 2, 'z [m]', 
-                   scale=15, color=label_color)
+        mlab.text3d(z_axis_x_pos, -tick_length * 8, scene_z_max / 2, 'z [m]', 
+                   scale=label_font_scale, color=label_color)
         for z in np.arange(0, scene_z_max + 1, 100):
             mlab.plot3d([z_axis_x_pos - tick_length, z_axis_x_pos], [0, 0], 
                        [z, z], color=axis_color, tube_radius=1)
             if z > 0:
-                mlab.text3d(z_axis_x_pos, -tick_length * 3, z, str(int(z)), 
-                           scale=12, color=label_color)
+                mlab.text3d(z_axis_x_pos, -tick_length * 3.5, z, str(int(z)), 
+                           scale=tick_font_scale, color=label_color)
 
 
 def plot_and_save_paper_figures(paths_absolute, path_labels, model, 
@@ -339,16 +386,16 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
     scene_z_max = 400
     cyl_height = 400
 
-    # 定义颜色（与论文中常用的颜色一致）
+    # Science 经典学术配色（沉稳、高区分度、色盲友好）
     colors = [
-        (1, 0, 1),      # 品红 - A*IMOPSO专用
-        (0, 0, 1),      # 蓝色
-        (1, 0, 0),      # 红色
-        (1, 1, 0),      # 黄色
-        (0, 1, 1),      # 青色
-        (0.5, 0, 0.5),  # 紫色
-        (1, 0.5, 0),    # 橙色
-        (0, 0, 0)       # 黑色
+        (0.882, 0.506, 0.510),  # #E18182 粉红 - A*IMOPSO（主角）
+        (0.976, 0.808, 0.612),  # #F9CE9C 浅橙
+        (0.165, 0.298, 0.443),  # #2A4C71 深海蓝
+        (0.784, 0.722, 0.831),  # #C8B8D4 淡紫
+        (0.000, 0.627, 0.529),  # #00A087 墨绿色
+        (0.169, 0.169, 0.169),  # #2B2B2B 深灰
+        (0.522, 0.569, 0.706),  # #8491B4 薰衣草灰
+        (0.612, 0.122, 0.388),  # #9C1F63 酒红
     ]
 
     if not paths_absolute:
@@ -378,49 +425,25 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
             aimopso_idx = i
             break
     
-    # 如果找到 A*IMOPSO，重新排序
+    # 如果找到 A*IMOPSO，重新排序（只排 labels 和 paths，不动 colors）
     if aimopso_idx is not None and aimopso_idx != 0:
-        # 重新排序 labels 和 colors
         path_labels_reordered = [path_labels[aimopso_idx]] + path_labels[:aimopso_idx] + path_labels[aimopso_idx+1:]
-        colors_reordered = [colors[aimopso_idx]] + colors[:aimopso_idx] + colors[aimopso_idx+1:]
         paths_absolute_reordered = [paths_absolute[aimopso_idx]] + paths_absolute[:aimopso_idx] + paths_absolute[aimopso_idx+1:]
         
-        # 更新变量
         path_labels = path_labels_reordered
-        colors = colors_reordered
         paths_absolute = paths_absolute_reordered
 
     # ==================== 1. 3D 视图 ====================
     print(f"生成 3D 视图...")
-    fig_3d = mlab.figure('3D View', bgcolor=(1, 1, 1), size=(1200, 900))
+    fig_3d = mlab.figure('3D View', bgcolor=(1, 1, 1), size=(1200, 800))
     
     # 绘制地形
     terrain_surface = _plot_terrain(H, map_size_x, map_size_y, 
                                     colormap='summer', opacity=1.0)
     terrain_surface.module_manager.scalar_lut_manager.data_range = [50, terrain_max]
     
-    # 添加 colorbar（右侧）
-    colorbar = mlab.colorbar(terrain_surface, title='', orientation='vertical', nb_labels=None)
-    # 设置 colorbar 位置（向左移动，靠近路径规划图）
-    colorbar.scalar_bar_representation.position = [0.86, 0.25]  # [x, y] - 向左移到 0.88
-    colorbar.scalar_bar_representation.position2 = [0.04, 0.35]  # [width, height] - 缩小一半
-    # 设置标签数量和格式
+    # 3D视图不放colorbar，只在俯视图中显示（节省空间）
     num_labels = int((terrain_max - 50) / 50) + 1
-    colorbar.scalar_bar.number_of_labels = num_labels
-    colorbar.scalar_bar.label_format = '%.0f'
-    # 设置标签样式（减小字体，与坐标轴数字一致）
-    label_props = colorbar.label_text_property
-    label_props.color = (0, 0, 0)
-    label_props.font_size = 10  # 减小字体
-    label_props.bold = False
-    label_props.italic = False
-    label_props.font_family = 'arial'
-    # 设置 colorbar 标题样式
-    title_props = colorbar.title_text_property
-    title_props.font_size = 10
-    title_props.bold = False
-    title_props.italic = False
-    title_props.font_family = 'arial'
     
     # 绘制坐标轴和网格
     _draw_custom_axes_and_grid(map_size_x, map_size_y, scene_z_max,
@@ -429,47 +452,35 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
     
     # 绘制威胁区域
     for (x0, y0, z0, R) in threats:
-        _draw_cylinder(x0, y0, z0, R, cyl_height, opacity=0.30)
+        _draw_cylinder(x0, y0, z0, R, cyl_height, color=(1, 0, 0), opacity=0.30)
     
-    # 绘制路径
+    # 绘制路径（主角A*IMOPSO加粗，航路点统一金黄色）
+    waypoint_color = (1, 0.84, 0)  # 金黄色航路点
     for i, path in enumerate(paths_absolute):
         _plot_path_line_and_midpoints(path, color_line=colors[i % len(colors)], 
+                                      tube_radius=5.0, point_scale=14,
+                                      color_point=waypoint_color,
                                       show_control_points=show_control_points)
     
     # 绘制起点和终点
     start_point_abs = paths_absolute[0][0, :]
     end_point_abs = paths_absolute[0][-1, :]
     mlab.points3d(start_point_abs[0], start_point_abs[1], start_point_abs[2], 
-                 color=(0, 0, 0), scale_factor=14, mode='cube')
+                 color=(0, 0, 0), scale_factor=18, mode='cube')
     mlab.points3d(end_point_abs[0], end_point_abs[1], end_point_abs[2], 
-                 color=(0, 0, 0), scale_factor=14, mode='sphere')
+                 color=(0, 0, 0), scale_factor=18, mode='sphere')
     
     # 设置视角
     mlab.view(azimuth=-135, elevation=65, distance='auto')
     
-    # 在Mayavi场景中添加标题（使用text方法精确定位）
-    mlab.text(0.5, 0.1, '(a) 3D path view', width=0.3, color=(0, 0, 0))
+    mlab.text(0.5, 0.06, '(a) 3D path view', width=0.55, color=(0, 0, 0))
     
-    # 保存图片（包含标题）
-    temp_path_3d = os.path.join(save_dir, f"{scene_name}_3d_view_temp.png")
-    mlab.savefig(temp_path_3d, size=(800, 500), magnification=dpi/100)
-    
-
-    # 创建 matplotlib 图例（单列竖向排列）
-    legend_path = os.path.join(save_dir, 'legend_temp.png')
-    _create_matplotlib_legend(path_labels, colors, legend_path, ncol=1)  # ncol=1 竖着放
-    
-    # 叠加图例到 3D 图（向左移动，靠近路径规划图）
+    # 保存3D图片（不叠加图例，图例只在俯视图显示）
     save_path_3d = os.path.join(save_dir, f"{scene_name}_3d_view.png")
-    _overlay_legend_on_image(temp_path_3d, legend_path, save_path_3d, 
-                            position='top-right', margin=(150,200))  # 不再添加标题，已在Mayavi中生成
+    mlab.savefig(save_path_3d, size=(900, 600), magnification=dpi/100)
     
     # 裁剪白色边框
     _crop_white_borders(save_path_3d, save_path_3d)
-    
-    # 删除临时文件
-    os.remove(temp_path_3d)
-    os.remove(legend_path)
     
     print(f"✅ 3D 视图已保存: {save_path_3d}")
     
@@ -477,7 +488,7 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
 
     # ==================== 2. 俯视图 ====================
     print(f"生成俯视图...")
-    fig_top = mlab.figure('Top View', bgcolor=(1, 1, 1), size=(900, 900))
+    fig_top = mlab.figure('Top View', bgcolor=(1, 1, 1), size=(1200, 900))
     
     # 绘制地形
     surf_top = _plot_terrain(H, map_size_x, map_size_y, 
@@ -485,27 +496,7 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
     surf_top.module_manager.scalar_lut_manager.data_range = [50, terrain_max]
     surf_top.actor.actor.force_opaque = True
     
-    # 添加 colorbar（右侧）
-    colorbar_top = mlab.colorbar(surf_top, title='', orientation='vertical', nb_labels=None)
-    # 设置 colorbar 位置（向左移动，靠近路径规划图）
-    colorbar_top.scalar_bar_representation.position = [0.8, 0.25]  # 向左移到 0.86
-    colorbar_top.scalar_bar_representation.position2 = [0.04, 0.35]  # 缩小一半
-    # 设置标签数量和格式
-    colorbar_top.scalar_bar.number_of_labels = num_labels
-    colorbar_top.scalar_bar.label_format = '%.0f'
-    # 设置标签样式（减小字体，与坐标轴数字一致）
-    label_props_top = colorbar_top.label_text_property
-    label_props_top.color = (0, 0, 0)
-    label_props_top.font_size = 10  # 减小字体
-    label_props_top.bold = False
-    label_props_top.italic = False
-    label_props_top.font_family = 'arial'
-    # 设置 colorbar 标题样式
-    title_props_top = colorbar_top.title_text_property
-    title_props_top.font_size = 10
-    title_props_top.bold = False
-    title_props_top.italic = False
-    title_props_top.font_family = 'arial'
+    # colorbar 不在 Mayavi 中渲染，改为后期用 matplotlib 画在右侧面板
     
     # 绘制威胁区域（圆圈）
     z_circle = np.max(H) + 2
@@ -520,22 +511,26 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
         mlab.points3d(x0, y0, z_circle, color=(1, 0, 0), 
                      scale_factor=10, mode='sphere')
     
-    # 绘制路径
+    # 绘制路径（主角A*IMOPSO加粗，航路点统一金黄色）
+    waypoint_color_top = (1, 0.84, 0)
     z_offset = 3 if raise_topview else 0
     for i, path in enumerate(paths_absolute):
         _plot_path_line_and_midpoints(path, color_line=colors[i % len(colors)], 
+                                      tube_radius=7.0, point_scale=20,
+                                      color_point=waypoint_color_top,
                                       show_control_points=show_control_points,
                                       z_offset=z_offset)
     
     # 绘制起点和终点
     mlab.points3d(start_point_abs[0], start_point_abs[1], z_circle + z_offset, 
-                 color=(0, 0, 0), scale_factor=14, mode='cube')
+                 color=(0, 0, 0), scale_factor=18, mode='cube')
     mlab.points3d(end_point_abs[0], end_point_abs[1], z_circle + z_offset, 
-                 color=(0, 0, 0), scale_factor=14, mode='sphere')
+                 color=(0, 0, 0), scale_factor=18, mode='sphere')
     
-    # 绘制坐标轴
+    # 绘制坐标轴（parallel projection 下 3D 文字会缩小，需要补偿放大）
     _draw_custom_axes_and_grid(map_size_x, map_size_y, 0, 
-                               draw_x=True, draw_y=True, draw_z=False)
+                               draw_x=True, draw_y=True, draw_z=False,
+                               tick_scale_override=36, label_scale_override=42)
     
     # 设置视角（模拟 View along +Z axis + Toggle parallel projection）
     # 俯视图：elevation=0（从上往下看XY平面）
@@ -546,34 +541,33 @@ def plot_and_save_paper_figures(paths_absolute, path_labels, model,
     
     # 调整正交投影的缩放比例（parallel_scale越大，内容越小）
     # 减小parallel_scale以确保y轴刻度不被截断
-    fig_top.scene.camera.parallel_scale = 750  # 从850减小到750，保留坐标轴标签显示空间
+    fig_top.scene.camera.parallel_scale = 950
     
-    # 在Mayavi场景中添加标题（使用text方法精确定位，单独放大字体）
-    mlab.text(0.5, 0.1, '(b) Top view of the path', width=0.4, color=(0, 0, 0))
+    mlab.text(0.5, 0.06, '(b) Top view of the path', width=0.75, color=(0, 0, 0))
     
-    # 保存图片（包含标题）
+    # 保存纯净的俯视图（无 colorbar，无图例）
     temp_path_top = os.path.join(save_dir, f"{scene_name}_top_view_temp.png")
-    mlab.savefig(temp_path_top, size=(800, 500), magnification=dpi/100)  # 与3D视图一致
-    
-    # 创建 matplotlib 图例（单列竖向排列）
-    legend_path_top = os.path.join(save_dir, 'legend_temp_top.png')
-    _create_matplotlib_legend(path_labels, colors, legend_path_top, ncol=1)  # ncol=1 竖着放
-    
-    # 叠加图例到俯视图（与3D视图位置一致）
-    save_path_top = os.path.join(save_dir, f"{scene_name}_top_view.png")
-    _overlay_legend_on_image(temp_path_top, legend_path_top, save_path_top,
-                            position='top-right', margin=(300, 200))  # 不再添加标题，已在Mayavi中生成
+    mlab.savefig(temp_path_top, size=(1100, 600), magnification=dpi/100)
     
     # 裁剪白色边框
-    _crop_white_borders(save_path_top, save_path_top)
+    _crop_white_borders(temp_path_top, temp_path_top)
+    
+    mlab.close(fig_top)
+    
+    # 用 matplotlib 创建右侧面板（图例 + colorbar 上下排列）
+    panel_path = os.path.join(save_dir, 'right_panel_temp.png')
+    _create_right_panel(path_labels, colors, 50, terrain_max,
+                        colormap_name='summer', save_path=panel_path)
+    
+    # 并排拼接：俯视图 + 右侧面板（顶部对齐，无间隙）
+    save_path_top = os.path.join(save_dir, f"{scene_name}_top_view.png")
+    _combine_images_horizontal(temp_path_top, panel_path, save_path_top, gap=-160, valign='top')
     
     # 删除临时文件
     os.remove(temp_path_top)
-    os.remove(legend_path_top)
+    os.remove(panel_path)
     
     print(f"✅ 俯视图已保存: {save_path_top}")
-    
-    mlab.close(fig_top)
 
     # ==================== 3. 拼接两张图片 ====================
     print(f"拼接3D视图和俯视图...")

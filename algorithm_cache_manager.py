@@ -122,6 +122,12 @@ class AlgorithmCacheManager:
             return None
         
         try:
+            import numpy as np
+            import sys
+            if not hasattr(np, '_core'):
+                np._core = np.core
+                sys.modules['numpy._core'] = np.core
+                sys.modules['numpy._core.multiarray'] = np.core.multiarray
             with open(cache_file, 'rb') as f:
                 result_data = pickle.load(f)
             print(f"  ✅ 从缓存加载 {algorithm_name} 的结果")
